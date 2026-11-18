@@ -4,8 +4,8 @@
 
 const CFG = {
   key: 'meguru-v3',
-  hazardRate: 1.5,          // 危険物の引換券倍率（変更はここだけ）
-  tiers: [1, 2, 3, 5, 10],  // 受付で扱う引換券の5段階
+  hazardTickets: 2,          // 危険物（モバイルバッテリー）は1個2枚
+  tiers: [1, 2, 3, 5, 10],  // 一般物の引換券5段階
   batteryGramsPerTicket: 50, // 乾電池は50gで引換券1枚
   photoEdge: 1000,          // 保存する写真の長辺
   photoQuality: 0.78,
@@ -36,9 +36,10 @@ function isBattery(item) {
 
 function awardTickets(item) {
   if (isBattery(item)) return batteryTickets(item.grams);
+  if (item && item.hazard) return CFG.hazardTickets;
   const base = Number(item && item.tickets);
   if (!Number.isFinite(base) || base <= 0) return 0;
-  return Math.round(base * (item.hazard ? CFG.hazardRate : 1));
+  return base;
 }
 
 function ticketTotal(state, sellerId) {
@@ -78,7 +79,6 @@ function hazardPhoto(label) {
 }
 
 const PHOTO_BATTERY = hazardPhoto('回収：電池類');
-const PHOTO_SPRAY = hazardPhoto('回収：スプレー缶');
 
 function blankSeller(id) {
   return {
@@ -125,8 +125,7 @@ function seed() {
       { id: 'i4', title: '平皿（22cm）', sellerId: 's4', image: 'assets/item-4.webp', tickets: 5, hazard: false },
       { id: 'i5', title: '鉢植え（ポトス）', sellerId: 's2', image: 'assets/item-5.webp', tickets: 3, hazard: false },
       { id: 'i6', title: '絵本', sellerId: 's3', image: 'assets/item-6.webp', tickets: 2, hazard: false },
-      { id: 'i7', title: 'モバイルバッテリー', sellerId: 's1', image: PHOTO_BATTERY, tickets: 5, hazard: true },
-      { id: 'i8', title: 'スプレー缶', sellerId: 's4', image: PHOTO_SPRAY, tickets: 2, hazard: true },
+      { id: 'i7', title: 'モバイルバッテリー', sellerId: 's1', image: PHOTO_BATTERY, tickets: 2, hazard: true },
       { id: 'i9', kind: 'battery', title: '乾電池', sellerId: 's2', image: PHOTO_BATTERY, grams: 180, tickets: 0, hazard: true },
     ],
   };
@@ -177,6 +176,8 @@ function normalize(raw) {
       hazard: kind === 'battery' ? true : !!it.hazard,
     });
   }
+  /* 旧デモデータの i8 を除去 */
+  out.items = out.items.filter((item) => item.id !== 'i8');
   return out;
 }
 

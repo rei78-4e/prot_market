@@ -50,18 +50,18 @@ function renderTiers() {
 
 function currentAward() {
   const kind = form.elements.kind.value;
-  const base = Number(form.elements.tickets.value) || 0;
-  return Math.round(base * (kind === 'hazard' ? CFG.hazardRate : 1));
+  if (kind === 'hazard') return CFG.hazardTickets;
+  return Number(form.elements.tickets.value) || 0;
 }
 
 function renderAward() {
   const kind = form.elements.kind.value;
-  const base = Number(form.elements.tickets.value) || 0;
   const award = currentAward();
+  const tierField = byId('tier-field');
+  if (tierField) tierField.hidden = kind === 'hazard';
   byId('award-preview').innerHTML = kind === 'hazard'
-    ? `売る人に渡す引換券：<b>${award}枚</b> <span class="hazard-tag">危険物 ×${CFG.hazardRate}</span>`
+    ? `売る人に渡す引換券：<b>${award}枚</b> <span class="hazard-tag">1個につき</span>`
     : `売る人に渡す引換券：<b>${award}枚</b>`;
-  byId('award-preview').dataset.base = String(base);
 }
 
 /* 乾電池の回収 */
@@ -171,7 +171,9 @@ form.addEventListener('submit', (event) => {
     return;
   }
   const kind = form.elements.kind.value;
-  const tickets = Number(form.elements.tickets.value) || CFG.tiers[0];
+  const tickets = kind === 'hazard'
+    ? CFG.hazardTickets
+    : (Number(form.elements.tickets.value) || CFG.tiers[0]);
   const item = {
     id: newId(),
     title,
@@ -215,7 +217,9 @@ function itemRow(item) {
   const battery = isBattery(item);
   const meta = battery
     ? `<span class="hazard-tag">乾電池回収</span> ・ 引換券 ${tickets}枚（${CFG.batteryGramsPerTicket}gで1枚）`
-    : `${item.hazard ? '<span class="hazard-tag">危険物</span>' : '一般物'} ・ 引換券 ${tickets}枚${item.hazard ? `（${item.tickets}枚 × ${CFG.hazardRate}）` : ''}`;
+    : item.hazard
+      ? `<span class="hazard-tag">モバイルバッテリー</span> ・ 引換券 ${tickets}枚（1個につき）`
+      : `一般物 ・ 引換券 ${tickets}枚`;
   return `<article class="admin-item">
     <img src="${esc(item.image)}" alt="" width="76" height="57" loading="lazy" decoding="async">
     <div class="admin-item-body">
@@ -318,9 +322,9 @@ function labelHTML(item) {
   return `<div class="label">
     <img class="label-photo" src="${esc(item.image)}" alt="">
     <div class="label-body">
-      <p class="label-kicker">めぐる団地 防災フリマ${item.hazard ? ' ・ 危険物（運営回収）' : ''}</p>
+      <p class="label-kicker">めぐる団地 防災フリマ${item.hazard ? ' ・ モバイルバッテリー（回収）' : ''}</p>
       <h1>${esc(item.title)}</h1>
-      <p class="label-ticket">引換券 <b>${awardTickets(item)}</b>枚${item.hazard ? `（${item.tickets}枚 × ${CFG.hazardRate}）` : ''}</p>
+      <p class="label-ticket">引換券 <b>${awardTickets(item)}</b>枚${item.hazard ? '（1個につき）' : ''}</p>
       <p class="label-seller">売った人：${esc(sellerName(seller))}${room ? ` / ${esc(room)}` : ''}</p>
       <p class="label-note">受付で引換券と交換してください。</p>
     </div>

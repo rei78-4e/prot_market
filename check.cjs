@@ -20,16 +20,14 @@ const run = (code) => vm.runInContext(code, ctx);
 
 /* 引換券 */
 assert.deepEqual(run('CFG.tiers'), [1, 2, 3, 5, 10]);
-assert.equal(run('CFG.hazardRate'), 1.5);
+assert.equal(run('CFG.hazardTickets'), 2);
 assert.equal(run('awardTickets({tickets:3,hazard:false})'), 3);
-assert.equal(run('awardTickets({tickets:3,hazard:true})'), 5);
+assert.equal(run('awardTickets({tickets:3,hazard:true})'), 2);
 assert.equal(run('awardTickets({tickets:1,hazard:true})'), 2);
-assert.equal(run('awardTickets({tickets:2,hazard:true})'), 3);
-assert.equal(run('awardTickets({tickets:5,hazard:true})'), 8);
-assert.equal(run('awardTickets({tickets:10,hazard:true})'), 15);
-assert.equal(run('awardTickets({tickets:0,hazard:true})'), 0);
+assert.equal(run('awardTickets({tickets:10,hazard:true})'), 2);
+assert.equal(run('awardTickets({tickets:0,hazard:true})'), 2);
 
-/* 乾電池は50gで1枚（端数切り捨て、1.5倍は適用しない） */
+/* 乾電池は50gで1枚（端数切り捨て） */
 assert.equal(run('CFG.batteryGramsPerTicket'), 50);
 assert.equal(run('batteryTickets(0)'), 0);
 assert.equal(run('batteryTickets(49)'), 0);
@@ -42,10 +40,10 @@ assert.equal(run('awardTickets({kind:"battery",grams:1000,tickets:10,hazard:true
 /* 初期データ */
 const seed = run('seed()');
 assert.equal(seed.items.filter((item) => !item.hazard).length, 6);
-assert.equal(seed.items.filter((item) => item.hazard).length, 3);
+assert.equal(seed.items.filter((item) => item.hazard).length, 2);
 assert(seed.items.every((item) => seed.sellers[item.sellerId]), '全商品に売る人がいる');
 assert(seed.items.every((item) => item.image), '全商品に写真がある');
-assert.equal(run('ticketTotal(seed(),"s1")'), 10);
+assert.equal(run('ticketTotal(seed(),"s1")'), 4, '一般物2枚＋モバイルバッテリー2枚');
 assert.equal(run('ticketTotal(seed(),"s2")'), 9, '商品6枚＋乾電池180gで3枚');
 
 /* オプトイン */
@@ -107,11 +105,20 @@ assert.equal(run('awardTickets(nb.items[0])'), 3);
 assert.equal(nb.items[1].grams, 49);
 assert.equal(nb.items[2].grams, 0);
 
+/* 旧デモデータの除去 */
+ctx.legacy = {
+  v: 3,
+  me: 'me',
+  sellers: { me: { id: 'me', consent: {} } },
+  items: [{ id: 'i8', title: '旧データ', sellerId: 'me', image: '', tickets: 3 }],
+};
+assert.equal(run('normalize(legacy).items.length'), 0, '旧デモデータ i8 を除去');
+
 /* 保存と再読込 */
 run('persist(seed())');
 const loaded = run('loadState()');
 assert.equal(loaded.v, 3);
-assert.equal(loaded.items.length, 9);
+assert.equal(loaded.items.length, 8);
 assert(loaded.sellers[loaded.me], '自分のレコードがある');
 
-console.log('PASS: ticket tiers, hazard x1.5, battery 50g/ticket, opt-in visibility, normalization, persistence');
+console.log('PASS: ticket tiers, hazard fixed 2 tickets, battery 50g/ticket, opt-in visibility, normalization, persistence');

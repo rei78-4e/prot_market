@@ -7,7 +7,7 @@
 <meta name="description" content="めぐる団地 防災フリマの運営画面。商品の登録・削除、乾電池の回収、名札とラベルの印刷を行うデモです。">
 <title>めぐる団地 防災フリマ — 運営</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 fill=%27%231b1b18%27/%3E%3Crect x=%278%27 y=%278%27 width=%2716%27 height=%2716%27 fill=%27none%27 stroke=%27%23ffffff%27 stroke-width=%272%27/%3E%3C/svg%3E">
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=20261118">
 </head>
 <body>
 <a class="skip" href="#main">本文へ</a>
@@ -28,7 +28,7 @@
 
   <section class="card">
     <h2>商品を登録</h2>
-    <p class="muted">写真・引換券の枚数・売る人を入力します。危険物は運営が回収します。</p>
+    <p class="muted">写真・売る人・引換券を入力します。モバイルバッテリーは1個2枚で回収します。</p>
     <form id="register-form" novalidate>
       <p class="photo-label">商品の写真 <span class="req">必須</span></p>
       <div class="photo-editor">
@@ -47,9 +47,9 @@
       <fieldset class="choice">
         <legend>種類</legend>
         <label class="radio"><input type="radio" name="kind" value="general" checked><span>一般物</span></label>
-        <label class="radio"><input type="radio" name="kind" value="hazard"><span>危険物（運営が回収）</span></label>
+        <label class="radio"><input type="radio" name="kind" value="hazard"><span>モバイルバッテリー（回収）</span></label>
       </fieldset>
-      <fieldset class="choice">
+      <fieldset class="choice" id="tier-field">
         <legend>引換券（5段階）</legend>
         <div class="tier-row" id="tier-row"></div>
       </fieldset>
@@ -60,7 +60,7 @@
 
   <section class="card">
     <h2>乾電池の回収</h2>
-    <p class="muted">重さを量って引換券に換算します。50gで1枚、端数は切り捨てです。危険物の1.5倍は適用しません。</p>
+    <p class="muted">重さを量って引換券に換算します。50gで1枚、端数は切り捨てです。乾電池は重量だけで計算します。</p>
     <form id="battery-form" novalidate>
       <div class="form-grid">
         <label class="field"><span>売る人</span><select id="battery-seller" name="seller"></select></label>
@@ -104,7 +104,7 @@
 </footer>
 <div id="print-area"></div>
 <div id="toast" role="status" aria-live="polite"></div>
-<script src="app.js"></script>
-<script src="admin.js"></script>
+<script src="app.js?v=20261118"></script>
+<script src="admin.js?v=20261118"></script>
 </body>
 </html>
