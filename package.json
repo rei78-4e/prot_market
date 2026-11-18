@@ -2,11 +2,11 @@
   "name": "meguru-danchi",
   "version": "1.0.0",
   "private": true,
-  "description": "めぐる団地 — 防災フェスのポイントフリマ（静的デモ）",
+  "description": "めぐる団地 — 防災フリマの引換券・名札デモ（静的）",
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "check": "node check-simple.cjs && node check-resident.cjs"
+    "check": "node check.cjs"
   },
   "devDependencies": {
     "wrangler": "^4.164.0"

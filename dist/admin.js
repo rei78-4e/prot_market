@@ -1,0 +1,390 @@
+'use strict';
+
+let state = loadState();
+let pendingPhoto = '';
+const byId = (id) => document.getElementById(id);
+const form = byId('register-form');
+
+/* 選択肢 */
+function optionLabel(seller) {
+  const name = seller.name || '匿名';
+  const room = seller.room ? ` / ${seller.room}` : '';
+  const me = seller.id === state.me ? '（この端末）' : '';
+  return `${name}${room}${me}`;
+}
+
+function fillSellerSelect(select, keep) {
+  const current = keep ? select.value : '';
+  select.innerHTML = Object.values(state.sellers)
+    .map((seller) => `<option value="${esc(seller.id)}">${esc(optionLabel(seller))}</option>`)
+    .join('');
+  if (current && state.sellers[current]) select.value = current;
+}
+
+function fillTagSeller(selected) {
+  const select = byId('tag-seller');
+  const current = selected || select.value;
+  fillSellerSelect(select, false);
+  const target = current && state.sellers[current] ? current : defaultTagSeller();
+  select.value = target;
+}
+
+function defaultTagSeller() {
+  const withItems = Object.keys(state.sellers).find((id) => state.items.some((item) => item.sellerId === id));
+  return withItems || state.me;
+}
+
+function fillBatterySeller() {
+  const select = byId('battery-seller');
+  const current = select.value;
+  fillSellerSelect(select, false);
+  select.value = current && state.sellers[current] ? current : state.me;
+}
+
+function renderTiers() {
+  const fallback = CFG.tiers.includes(3) ? 3 : CFG.tiers[0];
+  byId('tier-row').innerHTML = CFG.tiers
+    .map((tier) => `<label class="tier"><input type="radio" name="tickets" value="${tier}"${tier === fallback ? ' checked' : ''}>${tier}枚</label>`)
+    .join('');
+}
+
+function currentAward() {
+  const kind = form.elements.kind.value;
+  const base = Number(form.elements.tickets.value) || 0;
+  return Math.round(base * (kind === 'hazard' ? CFG.hazardRate : 1));
+}
+
+function renderAward() {
+  const kind = form.elements.kind.value;
+  const base = Number(form.elements.tickets.value) || 0;
+  const award = currentAward();
+  byId('award-preview').innerHTML = kind === 'hazard'
+    ? `売る人に渡す引換券：<b>${award}枚</b> <span class="hazard-tag">危険物 ×${CFG.hazardRate}</span>`
+    : `売る人に渡す引換券：<b>${award}枚</b>`;
+  byId('award-preview').dataset.base = String(base);
+}
+
+/* 乾電池の回収 */
+function batteryGrams() {
+  return Math.max(0, Math.round(Number(byId('battery-grams').value) || 0));
+}
+
+function renderBatteryPreview() {
+  const grams = batteryGrams();
+  const detail = grams > 0
+    ? `${grams}g / ${CFG.batteryGramsPerTicket}gで1枚`
+    : `${CFG.batteryGramsPerTicket}gで1枚`;
+  byId('battery-preview').innerHTML = `引換券 <b>${batteryTickets(grams)}</b>枚 <span class="muted">${detail}</span>`;
+}
+
+byId('battery-grams').addEventListener('input', renderBatteryPreview);
+
+byId('battery-form').addEventListener('submit', (event) => {
+  event.preventDefault();
+  const grams = batteryGrams();
+  if (grams <= 0) {
+    toast('重さを入力してください');
+    byId('battery-grams').focus();
+    return;
+  }
+  if (batteryTickets(grams) < 1) {
+    toast(`${CFG.batteryGramsPerTicket}g未満は引換券になりません`);
+    byId('battery-grams').focus();
+    return;
+  }
+  const sellerId = byId('battery-seller').value;
+  if (!state.sellers[sellerId]) {
+    toast('売る人を選んでください');
+    return;
+  }
+  const item = {
+    id: newId(),
+    kind: 'battery',
+    title: '乾電池',
+    sellerId,
+    image: PHOTO_BATTERY,
+    grams,
+    tickets: 0,
+    hazard: true,
+  };
+  state.items.unshift(item);
+  if (!persist(state)) {
+    state.items.shift();
+    toast('保存できませんでした');
+    return;
+  }
+  byId('battery-grams').value = '';
+  renderBatteryPreview();
+  renderItems();
+  renderHazards();
+  fillTagSeller(byId('tag-seller').value);
+  renderTag();
+  toast(`乾電池 ${grams}g を登録しました（引換券${awardTickets(item)}枚）`);
+});
+
+/* 写真 */
+function renderAdminPhoto() {
+  const box = byId('admin-photo');
+  box.innerHTML = pendingPhoto ? `<img src="${esc(pendingPhoto)}" alt="">` : '写真なし';
+  box.classList.toggle('empty', !pendingPhoto);
+}
+
+document.querySelectorAll('[data-pick]').forEach((button) => {
+  button.addEventListener('click', () => byId(button.dataset.pick).click());
+});
+
+async function handlePhoto(input) {
+  const file = input.files && input.files[0];
+  input.value = '';
+  if (!file) return;
+  try {
+    pendingPhoto = await photoFromFile(file);
+    renderAdminPhoto();
+  } catch (error) {
+    toast(error.message);
+  }
+}
+
+byId('admin-camera').addEventListener('change', (event) => handlePhoto(event.target));
+byId('admin-file').addEventListener('change', (event) => handlePhoto(event.target));
+
+form.addEventListener('change', (event) => {
+  if (event.target.name === 'kind' || event.target.name === 'tickets') renderAward();
+});
+
+/* 登録 */
+form.addEventListener('submit', (event) => {
+  event.preventDefault();
+  const title = clean(byId('admin-title').value, CFG.limits.title);
+  if (!title) {
+    toast('商品名を入力してください');
+    byId('admin-title').focus();
+    return;
+  }
+  if (!pendingPhoto) {
+    toast('商品の写真を登録してください');
+    return;
+  }
+  const sellerId = byId('seller-select').value;
+  if (!state.sellers[sellerId]) {
+    toast('売る人を選んでください');
+    return;
+  }
+  const kind = form.elements.kind.value;
+  const tickets = Number(form.elements.tickets.value) || CFG.tiers[0];
+  const item = {
+    id: newId(),
+    title,
+    sellerId,
+    image: pendingPhoto,
+    tickets,
+    hazard: kind === 'hazard',
+  };
+
+  state.items.unshift(item);
+  if (!persist(state)) {
+    state.items.shift();
+    toast('保存できませんでした。写真を小さくしてください。');
+    return;
+  }
+
+  pendingPhoto = '';
+  byId('admin-title').value = '';
+  form.elements.kind.value = 'general';
+  const fallback = CFG.tiers.includes(3) ? 3 : CFG.tiers[0];
+  form.elements.tickets.value = String(fallback);
+  renderAdminPhoto();
+  renderAward();
+  renderItems();
+  renderHazards();
+  fillTagSeller(byId('tag-seller').value);
+  renderTag();
+  toast('登録しました');
+  byId('admin-title').focus();
+});
+
+/* 登録済みの商品・回収 */
+function itemLabel(item) {
+  return isBattery(item) ? `乾電池 ${item.grams}g` : item.title;
+}
+
+function itemRow(item) {
+  const seller = state.sellers[item.sellerId];
+  const tickets = awardTickets(item);
+  const sellerLabel = seller ? (seller.name || '匿名') : '不明';
+  const battery = isBattery(item);
+  const meta = battery
+    ? `<span class="hazard-tag">乾電池回収</span> ・ 引換券 ${tickets}枚（${CFG.batteryGramsPerTicket}gで1枚）`
+    : `${item.hazard ? '<span class="hazard-tag">危険物</span>' : '一般物'} ・ 引換券 ${tickets}枚${item.hazard ? `（${item.tickets}枚 × ${CFG.hazardRate}）` : ''}`;
+  return `<article class="admin-item">
+    <img src="${esc(item.image)}" alt="" width="76" height="57" loading="lazy" decoding="async">
+    <div class="admin-item-body">
+      <p class="admin-item-title">${esc(itemLabel(item))}</p>
+      <p class="muted">${esc(sellerLabel)} ・ ${meta}</p>
+    </div>
+    <div class="admin-item-actions">
+      ${battery ? '' : `<button class="secondary" type="button" data-print="${esc(item.id)}">ラベル</button>`}
+      <button class="danger" type="button" data-delete="${esc(item.id)}">削除</button>
+    </div>
+  </article>`;
+}
+
+function renderItems() {
+  byId('item-count').textContent = `${state.items.length}点`;
+  byId('admin-items').innerHTML = state.items.length
+    ? state.items.map(itemRow).join('')
+    : '<p class="muted">まだ登録がありません。</p>';
+}
+
+function renderHazards() {
+  const items = state.items.filter((item) => item.hazard);
+  byId('hazard-list').innerHTML = items.length
+    ? items.map((item) => {
+      const seller = state.sellers[item.sellerId];
+      return `<li><img src="${esc(item.image)}" alt="" width="56" height="42" loading="lazy" decoding="async"><span>${esc(itemLabel(item))}</span><span class="muted">${esc(seller ? (seller.name || '匿名') : '不明')} ・ ${awardTickets(item)}枚</span></li>`;
+    }).join('')
+    : '<li class="muted">回収対象はありません。</li>';
+}
+
+function removeItem(id) {
+  const item = state.items.find((i) => i.id === id);
+  if (!item) return;
+  if (!confirm(`「${itemLabel(item)}」を削除しますか？`)) return;
+  const index = state.items.indexOf(item);
+  state.items.splice(index, 1);
+  if (!persist(state)) {
+    state.items.splice(index, 0, item);
+    toast('削除を保存できませんでした');
+    return;
+  }
+  renderItems();
+  renderHazards();
+  renderTag();
+  toast('削除しました');
+}
+
+byId('admin-items').addEventListener('click', (event) => {
+  const del = event.target.closest('[data-delete]');
+  if (del) {
+    removeItem(del.dataset.delete);
+    return;
+  }
+  const print = event.target.closest('[data-print]');
+  if (print) {
+    const item = state.items.find((i) => i.id === print.dataset.print);
+    if (item) printBlock(labelHTML(item));
+  }
+});
+
+/* 名札 */
+function tagHTML(seller) {
+  const items = state.items.filter((item) => item.sellerId === seller.id);
+  const photo = sellerPhoto(seller);
+  const room = sellerRoom(seller);
+  const contact = sellerContact(seller);
+  const grid = items.slice(0, 8).map((item) => `<figure>
+      <img src="${esc(item.image)}" alt="">
+      <figcaption><span>${esc(item.title)}${isBattery(item) ? ` ${item.grams}g` : ''}${item.hazard ? '（回収）' : ''}</span><b>${awardTickets(item)}枚</b></figcaption>
+    </figure>`).join('');
+  return `<div class="tag">
+    <p class="tag-kicker">めぐる団地 防災フリマ</p>
+    <div class="tag-head">
+      ${photo ? `<img class="tag-photo" src="${esc(photo)}" alt="">` : '<div class="tag-photo tag-photo-empty" aria-hidden="true"></div>'}
+      <div class="tag-id">
+        <p class="tag-name">${esc(sellerName(seller))}</p>
+        ${room ? `<p class="tag-meta">${esc(room)}</p>` : ''}
+        ${contact ? `<p class="tag-meta">${esc(contact)}</p>` : ''}
+      </div>
+    </div>
+    <p class="tag-caption">この人が売ったもの</p>
+    ${items.length ? `<div class="tag-grid">${grid}</div>${items.length > 8 ? `<p class="tag-more">ほか ${items.length - 8}点</p>` : ''}` : '<p class="muted">出品はありません。</p>'}
+    <p class="tag-foot">受付で引換券を扱います。</p>
+  </div>`;
+}
+
+function renderTag() {
+  const select = byId('tag-seller');
+  const seller = state.sellers[select.value];
+  byId('tag-preview').innerHTML = seller ? tagHTML(seller) : '';
+  byId('print-tag').disabled = !seller || !state.items.some((item) => item.sellerId === select.value);
+}
+
+byId('tag-seller').addEventListener('change', renderTag);
+
+/* ラベル */
+function labelHTML(item) {
+  const seller = state.sellers[item.sellerId] || {};
+  const room = sellerRoom(seller);
+  return `<div class="label">
+    <img class="label-photo" src="${esc(item.image)}" alt="">
+    <div class="label-body">
+      <p class="label-kicker">めぐる団地 防災フリマ${item.hazard ? ' ・ 危険物（運営回収）' : ''}</p>
+      <h1>${esc(item.title)}</h1>
+      <p class="label-ticket">引換券 <b>${awardTickets(item)}</b>枚${item.hazard ? `（${item.tickets}枚 × ${CFG.hazardRate}）` : ''}</p>
+      <p class="label-seller">売った人：${esc(sellerName(seller))}${room ? ` / ${esc(room)}` : ''}</p>
+      <p class="label-note">受付で引換券と交換してください。</p>
+    </div>
+  </div>`;
+}
+
+/* 印刷 */
+function printBlock(html) {
+  byId('print-area').innerHTML = html;
+  document.body.classList.add('printing');
+  window.print();
+}
+
+window.addEventListener('afterprint', () => {
+  document.body.classList.remove('printing');
+  byId('print-area').innerHTML = '';
+});
+
+byId('print-tag').addEventListener('click', () => {
+  const seller = state.sellers[byId('tag-seller').value];
+  if (seller) printBlock(tagHTML(seller));
+});
+
+/* 初期化・同期 */
+function sync() {
+  state = loadState();
+  fillSellerSelect(byId('seller-select'), true);
+  fillBatterySeller();
+  fillTagSeller(byId('tag-seller').value);
+  renderItems();
+  renderHazards();
+  renderTag();
+}
+
+window.addEventListener('storage', (event) => {
+  if (event.key === CFG.key) sync();
+});
+
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) return;
+  const latest = loadState();
+  if (JSON.stringify(latest) !== JSON.stringify(state)) {
+    state = latest;
+    sync();
+  }
+});
+
+byId('reset').addEventListener('click', () => {
+  if (!confirm('このブラウザーの登録・プロフィールを消して、初期データに戻しますか？')) return;
+  try {
+    localStorage.removeItem(CFG.key);
+  } catch {
+    /* 保存領域に触れない環境ではそのまま再読込 */
+  }
+  location.reload();
+});
+
+renderTiers();
+fillSellerSelect(byId('seller-select'), false);
+fillBatterySeller();
+fillTagSeller(defaultTagSeller());
+renderAward();
+renderBatteryPreview();
+renderAdminPhoto();
+renderItems();
+renderHazards();
+renderTag();
