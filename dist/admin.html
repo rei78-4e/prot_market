@@ -76,13 +76,15 @@
     <div id="admin-items" class="admin-items"></div>
   </section>
 
-  <section class="card">
+  <section class="card" id="tag-section">
     <h2>名札を印刷</h2>
-    <p class="muted">売った人の情報と、売ったものの一覧を名札にします。表示は本人のオプトインに従います。</p>
+    <p class="muted">売った人の情報と、売ったものの一覧を名札にします。受付で参加者のQRコードを読み取ると、DBを介さずその場で名札に反映できます。</p>
     <div class="tag-controls">
       <label class="field"><span>売る人</span><select id="tag-seller"></select></label>
+      <button class="secondary" id="open-qr-scan" type="button">QRコードを読み取る（モック）</button>
       <button class="primary" id="print-tag" type="button">この名札を印刷</button>
     </div>
+    <p class="qr-status" id="qr-scan-status" hidden></p>
     <div id="tag-preview" class="tag-preview"></div>
   </section>
 
@@ -103,6 +105,33 @@
   <span>認証はありません。会場の端末で使う想定です。</span>
 </footer>
 <div id="print-area"></div>
+<dialog id="qr-dialog" class="dialog">
+  <form method="dialog" class="dialog-bar"><button class="dialog-close" aria-label="閉じる">×</button></form>
+  <div class="dialog-info">
+    <p class="kicker">受付スキャナー（デモモック）</p>
+    <h2>名札用QRコードの読み取り</h2>
+    <p class="muted">参加者がスマホ画面に表示したQRコードをカメラで読み取る想定のモックです。サーバーやDBには保存せず、名札印刷プレビューへ直接反映します。</p>
+    <div class="qr-scanner-mock">
+      <div class="qr-viewfinder" aria-hidden="true">
+        <span class="qr-frame"></span>
+        <span class="qr-caption">カメラ枠にQRコードを合わせる想定</span>
+      </div>
+      <div class="qr-preset-list">
+        <p class="qr-label">ワンクリックで読み取りを再現</p>
+        <div class="qr-presets" id="qr-presets"></div>
+      </div>
+    </div>
+    <form class="qr-paste-form" id="qr-paste-form" novalidate>
+      <label class="field">
+        <span>またはコピーしたQRデータを貼り付け</span>
+        <div class="field-row">
+          <input id="qr-paste-input" placeholder="MEGURU1:..." autocomplete="off">
+          <button class="primary" type="submit">反映する</button>
+        </div>
+      </label>
+    </form>
+  </div>
+</dialog>
 <div id="toast" role="status" aria-live="polite"></div>
 <script src="app.js?v=20261118"></script>
 <script src="admin.js?v=20261118"></script>

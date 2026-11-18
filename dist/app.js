@@ -65,6 +65,138 @@ function sellerPhoto(s) {
   return consented(s, 'photo') && s.photo ? s.photo : '';
 }
 
+/* 名札印刷用QRコード（モック・DB不要） */
+function profilePayload(seller) {
+  const s = seller || {};
+  const c = s.consent || {};
+  const name = c.name && s.name ? clean(s.name, CFG.limits.name) : '';
+  const room = c.room && s.room ? clean(s.room, CFG.limits.room) : '';
+  const contact = c.contact && s.contact ? clean(s.contact, CFG.limits.contact) : '';
+  const photo = !!(c.photo && s.photo);
+  return {
+    v: 1,
+    id: clean(s.id || 'me', 24) || 'me',
+    name,
+    room,
+    contact,
+    photo,
+    consent: {
+      name: !!name,
+      room: !!room,
+      contact: !!contact,
+      photo,
+    },
+  };
+}
+
+function encodeProfileQR(seller) {
+  const json = JSON.stringify(profilePayload(seller));
+  const utf8 = unescape(encodeURIComponent(json));
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+  let out = '';
+  for (let i = 0; i < utf8.length; i += 3) {
+    const b0 = utf8.charCodeAt(i);
+    const b1 = i + 1 < utf8.length ? utf8.charCodeAt(i + 1) : 0;
+    const b2 = i + 2 < utf8.length ? utf8.charCodeAt(i + 2) : 0;
+    const n = (b0 << 16) | (b1 << 8) | b2;
+    out += chars[(n >> 18) & 63] + chars[(n >> 12) & 63];
+    if (i + 1 < utf8.length) out += chars[(n >> 6) & 63];
+    if (i + 2 < utf8.length) out += chars[n & 63];
+  }
+  return 'MEGURU1:' + out;
+}
+
+function decodeProfileQR(raw) {
+  const text = String(raw || '').trim();
+  const body = text.startsWith('MEGURU1:') ? text.slice(8) : text;
+  if (!body) return null;
+  try {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+    const cleanBody = body.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    let utf8 = '';
+    for (let i = 0; i < cleanBody.length; i += 4) {
+      const c0 = chars.indexOf(cleanBody[i]);
+      const c1 = chars.indexOf(cleanBody[i + 1]);
+      const c2 = i + 2 < cleanBody.length ? chars.indexOf(cleanBody[i + 2]) : 0;
+      const c3 = i + 3 < cleanBody.length ? chars.indexOf(cleanBody[i + 3]) : 0;
+      if (c0 < 0 || c1 < 0 || c2 < 0 || c3 < 0) return null;
+      const n = (c0 << 18) | (c1 << 12) | (c2 << 6) | c3;
+      utf8 += String.fromCharCode((n >> 16) & 255);
+      if (i + 2 < cleanBody.length) utf8 += String.fromCharCode((n >> 8) & 255);
+      if (i + 3 < cleanBody.length) utf8 += String.fromCharCode(n & 255);
+    }
+    const data = JSON.parse(decodeURIComponent(escape(utf8)));
+    if (!data || typeof data !== 'object') return null;
+    return profilePayload({
+      id: data.id,
+      name: data.name,
+      room: data.room,
+      contact: data.contact,
+      photo: data.photo ? '1' : '',
+      consent: data.consent || {
+        name: !!data.name,
+        room: !!data.room,
+        contact: !!data.contact,
+        photo: !!data.photo,
+      },
+    });
+  } catch {
+    return null;
+  }
+}
+
+function qrSVG(text) {
+  const size = 25;
+  const grid = Array.from({ length: size }, () => Array(size).fill(null));
+  const placeFinder = (r0, c0) => {
+    for (let dr = -1; dr <= 7; dr++) {
+      for (let dc = -1; dc <= 7; dc++) {
+        const r = r0 + dr;
+        const c = c0 + dc;
+        if (r < 0 || r >= size || c < 0 || c >= size) continue;
+        const inOuter = dr >= 0 && dr <= 6 && dc >= 0 && dc <= 6;
+        const onBorder = dr === 0 || dr === 6 || dc === 0 || dc === 6;
+        const inInner = dr >= 2 && dr <= 4 && dc >= 2 && dc <= 4;
+        grid[r][c] = inOuter && (onBorder || inInner);
+      }
+    }
+  };
+  placeFinder(0, 0);
+  placeFinder(0, size - 7);
+  placeFinder(size - 7, 0);
+  for (let i = 8; i < size - 8; i++) {
+    grid[6][i] = i % 2 === 0;
+    grid[i][6] = i % 2 === 0;
+  }
+  for (let dr = -2; dr <= 2; dr++) {
+    for (let dc = -2; dc <= 2; dc++) {
+      const onEdge = Math.abs(dr) === 2 || Math.abs(dc) === 2;
+      grid[18 + dr][18 + dc] = onEdge || (dr === 0 && dc === 0);
+    }
+  }
+  let h1 = 2166136261 >>> 0;
+  let h2 = 16777619 >>> 0;
+  const str = String(text || '');
+  for (let i = 0; i < str.length; i++) {
+    const code = str.charCodeAt(i);
+    h1 = Math.imul(h1 ^ code, 16777619) >>> 0;
+    h2 = Math.imul(h2 ^ (code + i * 31), 2246822519) >>> 0;
+  }
+  let state = (h1 ^ h2) || 1;
+  const rects = [];
+  for (let r = 0; r < size; r++) {
+    for (let c = 0; c < size; c++) {
+      if (grid[r][c] === null) {
+        const mix = str.charCodeAt((r * size + c) % Math.max(1, str.length)) || 7;
+        state = (Math.imul(state ^ mix, 1664525) + 1013904223) >>> 0;
+        grid[r][c] = ((state >>> 11) & 1) === 1;
+      }
+      if (grid[r][c]) rects.push(`<rect x="${c + 2}" y="${r + 2}" width="1" height="1"/>`);
+    }
+  }
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size + 4} ${size + 4}" shape-rendering="crispEdges" role="img" aria-label="名札印刷用QRコード"><rect width="${size + 4}" height="${size + 4}" fill="#ffffff"/><g fill="#111111">${rects.join('')}</g></svg>`;
+}
+
 /* デモ用のプレースホルダー画像（外部通信なし・無彩色） */
 function avatar(label) {
   const ch = esc(String(label || '').slice(0, 1) || '氏');

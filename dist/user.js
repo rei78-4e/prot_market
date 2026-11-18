@@ -111,6 +111,43 @@ function renderPhotoPreview() {
   box.classList.toggle('empty', !pendingPhoto);
 }
 
+function draftSeller() {
+  return {
+    id: state.me,
+    name: clean(byId('me-name').value, CFG.limits.name),
+    room: clean(byId('me-room').value, CFG.limits.room),
+    contact: clean(byId('me-contact').value, CFG.limits.contact),
+    photo: pendingPhoto,
+    consent: {
+      name: byId('c-name').checked,
+      room: byId('c-room').checked,
+      contact: byId('c-contact').checked,
+      photo: byId('c-photo').checked,
+    },
+  };
+}
+
+function renderProfileQR() {
+  const qrBox = byId('profile-qr');
+  if (!qrBox) return;
+  const draft = draftSeller();
+  const payload = profilePayload(draft);
+  const code = encodeProfileQR(draft);
+  qrBox.innerHTML = qrSVG(code);
+  qrBox.dataset.code = code;
+  const rows = [
+    ['表示名', payload.consent.name ? payload.name : '非公開（匿名の出品者）'],
+    ['部屋・階', payload.consent.room ? payload.room : '非公開'],
+    ['連絡先', payload.consent.contact ? payload.contact : '非公開'],
+    ['顔写真', payload.consent.photo ? '公開する' : '非公開'],
+  ];
+  byId('qr-summary').innerHTML = rows
+    .map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`)
+    .join('');
+  const link = byId('qr-open-admin');
+  if (link) link.href = `admin.html?qr=${encodeURIComponent(code)}#tag-section`;
+}
+
 function fillForm() {
   const seller = state.sellers[state.me];
   byId('me-name').value = seller.name;
@@ -122,6 +159,7 @@ function fillForm() {
   byId('c-photo').checked = seller.consent.photo;
   pendingPhoto = seller.photo || '';
   renderPhotoPreview();
+  renderProfileQR();
 }
 
 document.querySelectorAll('[data-pick]').forEach((button) => {
@@ -135,6 +173,7 @@ async function handlePhoto(input) {
   try {
     pendingPhoto = await photoFromFile(file);
     renderPhotoPreview();
+    renderProfileQR();
     byId('save-state').textContent = '写真を選びました。保存してください。';
   } catch (error) {
     toast(error.message);
@@ -147,7 +186,25 @@ byId('file-input').addEventListener('change', (event) => handlePhoto(event.targe
 byId('photo-clear').addEventListener('click', () => {
   pendingPhoto = '';
   renderPhotoPreview();
+  renderProfileQR();
   byId('save-state').textContent = '写真を削除しました。保存してください。';
+});
+
+byId('profile-form').addEventListener('input', renderProfileQR);
+byId('profile-form').addEventListener('change', renderProfileQR);
+
+byId('qr-copy').addEventListener('click', async () => {
+  const code = byId('profile-qr').dataset.code || encodeProfileQR(draftSeller());
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(code);
+      toast('QRコードのデータ文字列をコピーしました');
+      return;
+    }
+  } catch {
+    /* クリップボード非対応時はフォールバック */
+  }
+  toast(`QRデータ: ${code.slice(0, 28)}…`);
 });
 
 byId('profile-form').addEventListener('submit', (event) => {
@@ -197,6 +254,7 @@ byId('profile-form').addEventListener('submit', (event) => {
     return;
   }
   byId('save-state').textContent = '保存しました';
+  renderProfileQR();
   renderSummary();
   refreshSellerInMarket();
   toast(warnings.length ? warnings[0] : '保存しました');

@@ -310,10 +310,104 @@ function renderTag() {
   const select = byId('tag-seller');
   const seller = state.sellers[select.value];
   byId('tag-preview').innerHTML = seller ? tagHTML(seller) : '';
-  byId('print-tag').disabled = !seller || !state.items.some((item) => item.sellerId === select.value);
+  byId('print-tag').disabled = !seller;
 }
 
-byId('tag-seller').addEventListener('change', renderTag);
+byId('tag-seller').addEventListener('change', () => {
+  const status = byId('qr-scan-status');
+  if (status) status.hidden = true;
+  renderTag();
+});
+
+/* QRコード読み取り（モック・DB不要） */
+const qrDialog = byId('qr-dialog');
+
+function renderQRPresets() {
+  const box = byId('qr-presets');
+  if (!box) return;
+  box.innerHTML = Object.values(state.sellers).map((seller) => {
+    const code = encodeProfileQR(seller);
+    const p = profilePayload(seller);
+    const meta = [
+      p.consent.name ? p.name : '名前:非公開',
+      p.consent.room ? p.room : '部屋:非公開',
+      p.consent.contact ? p.contact : '連絡先:非公開',
+      p.consent.photo ? '写真:公開' : '写真:非公開',
+    ].join(' / ');
+    return `<button type="button" class="qr-preset-btn" data-qr="${esc(code)}">
+      <span class="qr-preset-mini">${qrSVG(code)}</span>
+      <span class="qr-preset-text">
+        <b>${esc(optionLabel(seller))} のQR</b>
+        <small>${esc(meta)}</small>
+      </span>
+    </button>`;
+  }).join('');
+}
+
+function applyScannedQR(rawCode, fromUrl) {
+  const parsed = decodeProfileQR(rawCode);
+  if (!parsed) {
+    toast('QRコードの形式を認識できませんでした');
+    return false;
+  }
+  const existing = state.sellers[parsed.id];
+  const basePhoto = existing && existing.photo ? existing.photo : (parsed.photo ? avatar(parsed.name || '氏') : '');
+  state.sellers[parsed.id] = {
+    id: parsed.id,
+    name: parsed.name || (existing ? existing.name : ''),
+    room: parsed.room || (existing ? existing.room : ''),
+    contact: parsed.contact || (existing ? existing.contact : ''),
+    photo: parsed.consent.photo ? basePhoto : (existing ? existing.photo : ''),
+    consent: {
+      name: parsed.consent.name,
+      room: parsed.consent.room,
+      contact: parsed.consent.contact,
+      photo: parsed.consent.photo && !!basePhoto,
+    },
+  };
+  fillSellerSelect(byId('seller-select'), true);
+  fillBatterySeller();
+  fillTagSeller(parsed.id);
+  renderTag();
+  const status = byId('qr-scan-status');
+  if (status) {
+    const label = parsed.consent.name && parsed.name ? parsed.name : '匿名の出品者';
+    status.textContent = `QRコードから「${label}」の公開設定を読み取りました（DB保存なし・印刷プレビューに反映済み）`;
+    status.hidden = false;
+  }
+  if (qrDialog && qrDialog.open) qrDialog.close();
+  toast('QRコードから名札情報を反映しました');
+  if (fromUrl) {
+    const section = byId('tag-section');
+    if (section) section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+  return true;
+}
+
+if (byId('open-qr-scan') && qrDialog) {
+  byId('open-qr-scan').addEventListener('click', () => {
+    renderQRPresets();
+    byId('qr-paste-input').value = '';
+    if (!qrDialog.open) qrDialog.showModal();
+  });
+
+  qrDialog.addEventListener('click', (event) => {
+    const btn = event.target.closest('[data-qr]');
+    if (btn) {
+      applyScannedQR(btn.dataset.qr, false);
+      return;
+    }
+    const rect = qrDialog.getBoundingClientRect();
+    const outside = event.clientX < rect.left || event.clientX > rect.right
+      || event.clientY < rect.top || event.clientY > rect.bottom;
+    if (outside) qrDialog.close();
+  });
+
+  byId('qr-paste-form').addEventListener('submit', (event) => {
+    event.preventDefault();
+    applyScannedQR(byId('qr-paste-input').value, false);
+  });
+}
 
 /* ラベル */
 function labelHTML(item) {
@@ -392,3 +486,6 @@ renderAdminPhoto();
 renderItems();
 renderHazards();
 renderTag();
+
+const qrParam = new URLSearchParams(location.search).get('qr');
+if (qrParam) applyScannedQR(qrParam, true);

@@ -54,16 +54,16 @@
           <input type="file" id="file-input" accept="image/*" hidden>
         </div>
         <div class="field">
-          <label for="me-name">表示名</label>
+          <label for="me-name">表示名（ニックネーム可）</label>
           <div class="field-row">
-            <input id="me-name" maxlength="24" autocomplete="nickname" placeholder="例：はるか">
+            <input id="me-name" maxlength="24" autocomplete="nickname" placeholder="例：はるか（ニックネームで構いません）">
             <label class="check"><input type="checkbox" id="c-name"><span class="sr-only">表示名を</span><span>公開する</span></label>
           </div>
         </div>
         <div class="field">
-          <label for="me-room">部屋・階</label>
+          <label for="me-room">部屋・階（書かなくても構いません）</label>
           <div class="field-row">
-            <input id="me-room" maxlength="16" placeholder="例：2階 / 203号室">
+            <input id="me-room" maxlength="16" placeholder="例：2階 / 203号室（空欄可）">
             <label class="check"><input type="checkbox" id="c-room"><span class="sr-only">部屋・階を</span><span>公開する</span></label>
           </div>
         </div>
@@ -77,6 +77,24 @@
         <div class="form-actions">
           <button class="primary" type="submit">保存する</button>
           <span class="save-state" id="save-state" aria-live="polite"></span>
+        </div>
+
+        <div class="qr-card" id="qr-card">
+          <div class="qr-head">
+            <h3>名札印刷用のQRコード（受付提示モック）</h3>
+            <p class="muted">受付でこのQRコードを見せると、「公開する」をオンにした情報だけを運営端末へ渡して名札を印刷できます。データベースには保存されません。</p>
+          </div>
+          <div class="qr-body">
+            <div class="qr-code" id="profile-qr" aria-live="polite"></div>
+            <div class="qr-detail">
+              <p class="qr-label">QRに含まれる公開情報</p>
+              <dl class="qr-summary" id="qr-summary"></dl>
+              <div class="qr-actions">
+                <a class="secondary" id="qr-open-admin" href="admin.html#tag-section">運営画面で読み取る（デモ）</a>
+                <button type="button" class="secondary" id="qr-copy">QRコードをコピー</button>
+              </div>
+            </div>
+          </div>
         </div>
       </form>
 

@@ -121,4 +121,26 @@ assert.equal(loaded.v, 3);
 assert.equal(loaded.items.length, 8);
 assert(loaded.sellers[loaded.me], '自分のレコードがある');
 
-console.log('PASS: ticket tiers, hazard fixed 2 tickets, battery 50g/ticket, opt-in visibility, normalization, persistence');
+/* 名札印刷用QRコード（モック） */
+ctx.qrSeller = {
+  id: 'me',
+  name: 'はるか',
+  room: '203号室',
+  contact: 'LINE: haruka',
+  photo: 'assets/item-1.webp',
+  consent: { name: true, room: false, contact: true, photo: false },
+};
+const qrCode = run('encodeProfileQR(qrSeller)');
+assert(qrCode.startsWith('MEGURU1:'), 'QRコード文字列にプレフィックスがある');
+ctx.qrCode = qrCode;
+const qrDecoded = run('decodeProfileQR(qrCode)');
+assert.equal(qrDecoded.name, 'はるか');
+assert.equal(qrDecoded.room, '', '非公開の部屋・階はQRに含めない');
+assert.equal(qrDecoded.contact, 'LINE: haruka');
+assert.equal(qrDecoded.consent.name, true);
+assert.equal(qrDecoded.consent.room, false);
+assert.equal(qrDecoded.consent.contact, true);
+assert.equal(qrDecoded.consent.photo, false);
+assert(run('qrSVG(qrCode)').startsWith('<svg'), 'QRコードのSVGを生成できる');
+
+console.log('PASS: ticket tiers, hazard fixed 2 tickets, battery 50g/ticket, opt-in visibility, QR mock, normalization, persistence');
