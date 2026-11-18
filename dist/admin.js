@@ -282,7 +282,9 @@ byId('admin-items').addEventListener('click', (event) => {
 
 /* 名札 */
 function tagHTML(seller) {
-  const items = state.items.filter((item) => item.sellerId === seller.id);
+  const items = Array.isArray(seller.mockItems)
+    ? seller.mockItems
+    : state.items.filter((item) => item.sellerId === seller.id);
   const photo = sellerPhoto(seller);
   const room = sellerRoom(seller);
   const contact = sellerContact(seller);
@@ -306,106 +308,150 @@ function tagHTML(seller) {
   </div>`;
 }
 
+let activeVirtualSeller = null;
+
 function renderTag() {
   const select = byId('tag-seller');
-  const seller = state.sellers[select.value];
+  const seller = activeVirtualSeller || state.sellers[select.value];
   byId('tag-preview').innerHTML = seller ? tagHTML(seller) : '';
   byId('print-tag').disabled = !seller;
 }
 
 byId('tag-seller').addEventListener('change', () => {
+  activeVirtualSeller = null;
   const status = byId('qr-scan-status');
   if (status) status.hidden = true;
   renderTag();
 });
 
-/* QRコード読み取り（モック・DB不要） */
+/* QRコード読み取り（仮想ユーザー表示モック・DB不要） */
 const qrDialog = byId('qr-dialog');
+const VIRTUAL_QR_USERS = [
+  {
+    id: 'virtual-1',
+    label: 'やまさん（ニックネームのみ・住所非公開）',
+    name: 'やまさん',
+    room: '',
+    contact: 'LINE: yama_danchi',
+    photo: avatar('や'),
+    consent: { name: true, room: false, contact: true, photo: true },
+    mockItems: [
+      { id: 'v1-1', title: 'キャンプ用ランタン', image: 'assets/item-2.webp', tickets: 5, hazard: false },
+      { id: 'v1-2', title: 'モバイルバッテリー', image: PHOTO_BATTERY, tickets: 2, hazard: true },
+    ],
+  },
+  {
+    id: 'virtual-2',
+    label: 'みき（ニックネーム＋階数のみ公開）',
+    name: 'みき',
+    room: '4階',
+    contact: '',
+    photo: avatar('み'),
+    consent: { name: true, room: true, contact: false, photo: true },
+    mockItems: [
+      { id: 'v2-1', title: '絵本（3冊セット）', image: 'assets/item-6.webp', tickets: 3, hazard: false },
+      { id: 'v2-2', title: '白いマグカップ', image: 'assets/item-1.webp', tickets: 2, hazard: false },
+    ],
+  },
+  {
+    id: 'virtual-3',
+    label: '匿名希望の参加者（連絡先のみ公開）',
+    name: '',
+    room: '',
+    contact: 'インターホン: 504呼び出し',
+    photo: '',
+    consent: { name: false, room: false, contact: true, photo: false },
+    mockItems: [
+      { id: 'v3-1', title: '平皿（22cm）', image: 'assets/item-4.webp', tickets: 3, hazard: false },
+    ],
+  },
+];
+
+let currentVirtualIndex = 0;
+let scanTimer = null;
+
+function selectVirtualUser(index) {
+  currentVirtualIndex = ((index % VIRTUAL_QR_USERS.length) + VIRTUAL_QR_USERS.length) % VIRTUAL_QR_USERS.length;
+  const user = VIRTUAL_QR_USERS[currentVirtualIndex];
+  const code = encodeProfileQR(user);
+  const frame = byId('qr-mock-frame');
+  const stateText = byId('qr-mock-state');
+  const vf = byId('qr-viewfinder');
+  if (frame) frame.innerHTML = qrSVG(code);
+  if (vf) vf.classList.add('scanning');
+  if (stateText) stateText.textContent = 'QRコードをスキャン中…';
+  clearTimeout(scanTimer);
+  scanTimer = setTimeout(() => {
+    if (vf) vf.classList.remove('scanning');
+    if (stateText) stateText.textContent = `読み取り完了：${user.label}`;
+  }, 420);
+  renderQRPresets();
+}
 
 function renderQRPresets() {
   const box = byId('qr-presets');
   if (!box) return;
-  box.innerHTML = Object.values(state.sellers).map((seller) => {
-    const code = encodeProfileQR(seller);
-    const p = profilePayload(seller);
+  box.innerHTML = VIRTUAL_QR_USERS.map((user, idx) => {
+    const code = encodeProfileQR(user);
+    const p = profilePayload(user);
     const meta = [
-      p.consent.name ? p.name : '名前:非公開',
-      p.consent.room ? p.room : '部屋:非公開',
-      p.consent.contact ? p.contact : '連絡先:非公開',
-      p.consent.photo ? '写真:公開' : '写真:非公開',
+      p.consent.name ? `表示名:${p.name}` : '表示名:非公開',
+      p.consent.room ? `部屋・階:${p.room}` : '部屋・階:非公開',
+      p.consent.contact ? `連絡先:${p.contact}` : '連絡先:非公開',
     ].join(' / ');
-    return `<button type="button" class="qr-preset-btn" data-qr="${esc(code)}">
+    const active = idx === currentVirtualIndex ? ' active' : '';
+    return `<button type="button" class="qr-preset-btn${active}" data-vindex="${idx}">
       <span class="qr-preset-mini">${qrSVG(code)}</span>
       <span class="qr-preset-text">
-        <b>${esc(optionLabel(seller))} のQR</b>
+        <b>${esc(user.label)}</b>
         <small>${esc(meta)}</small>
       </span>
     </button>`;
   }).join('');
 }
 
-function applyScannedQR(rawCode, fromUrl) {
-  const parsed = decodeProfileQR(rawCode);
-  if (!parsed) {
-    toast('QRコードの形式を認識できませんでした');
-    return false;
-  }
-  const existing = state.sellers[parsed.id];
-  const basePhoto = existing && existing.photo ? existing.photo : (parsed.photo ? avatar(parsed.name || '氏') : '');
-  state.sellers[parsed.id] = {
-    id: parsed.id,
-    name: parsed.name || (existing ? existing.name : ''),
-    room: parsed.room || (existing ? existing.room : ''),
-    contact: parsed.contact || (existing ? existing.contact : ''),
-    photo: parsed.consent.photo ? basePhoto : (existing ? existing.photo : ''),
-    consent: {
-      name: parsed.consent.name,
-      room: parsed.consent.room,
-      contact: parsed.consent.contact,
-      photo: parsed.consent.photo && !!basePhoto,
-    },
-  };
-  fillSellerSelect(byId('seller-select'), true);
-  fillBatterySeller();
-  fillTagSeller(parsed.id);
+function applyVirtualUser(user, scroll) {
+  activeVirtualSeller = user;
   renderTag();
   const status = byId('qr-scan-status');
   if (status) {
-    const label = parsed.consent.name && parsed.name ? parsed.name : '匿名の出品者';
-    status.textContent = `QRコードから「${label}」の公開設定を読み取りました（DB保存なし・印刷プレビューに反映済み）`;
+    status.textContent = `QR読み取り（モック）：仮想ユーザー「${sellerName(user)}」の個人情報を表示中（DB保存なし）`;
     status.hidden = false;
   }
   if (qrDialog && qrDialog.open) qrDialog.close();
-  toast('QRコードから名札情報を反映しました');
-  if (fromUrl) {
+  toast(`QRコードから仮想ユーザー「${sellerName(user)}」を読み取りました`);
+  if (scroll) {
     const section = byId('tag-section');
     if (section) section.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
-  return true;
 }
 
 if (byId('open-qr-scan') && qrDialog) {
   byId('open-qr-scan').addEventListener('click', () => {
-    renderQRPresets();
-    byId('qr-paste-input').value = '';
+    selectVirtualUser(currentVirtualIndex);
     if (!qrDialog.open) qrDialog.showModal();
   });
 
+  byId('qr-next-btn').addEventListener('click', () => {
+    selectVirtualUser(currentVirtualIndex + 1);
+  });
+
+  byId('qr-apply-btn').addEventListener('click', () => {
+    applyVirtualUser(VIRTUAL_QR_USERS[currentVirtualIndex], false);
+  });
+
   qrDialog.addEventListener('click', (event) => {
-    const btn = event.target.closest('[data-qr]');
+    const btn = event.target.closest('[data-vindex]');
     if (btn) {
-      applyScannedQR(btn.dataset.qr, false);
+      const idx = Number(btn.dataset.vindex) || 0;
+      selectVirtualUser(idx);
+      applyVirtualUser(VIRTUAL_QR_USERS[idx], false);
       return;
     }
     const rect = qrDialog.getBoundingClientRect();
     const outside = event.clientX < rect.left || event.clientX > rect.right
       || event.clientY < rect.top || event.clientY > rect.bottom;
     if (outside) qrDialog.close();
-  });
-
-  byId('qr-paste-form').addEventListener('submit', (event) => {
-    event.preventDefault();
-    applyScannedQR(byId('qr-paste-input').value, false);
   });
 }
 
@@ -438,7 +484,7 @@ window.addEventListener('afterprint', () => {
 });
 
 byId('print-tag').addEventListener('click', () => {
-  const seller = state.sellers[byId('tag-seller').value];
+  const seller = activeVirtualSeller || state.sellers[byId('tag-seller').value];
   if (seller) printBlock(tagHTML(seller));
 });
 
@@ -488,4 +534,20 @@ renderHazards();
 renderTag();
 
 const qrParam = new URLSearchParams(location.search).get('qr');
-if (qrParam) applyScannedQR(qrParam, true);
+if (qrParam) {
+  const decoded = decodeProfileQR(qrParam);
+  if (decoded && (decoded.name || decoded.room || decoded.contact || decoded.photo)) {
+    applyVirtualUser({
+      id: 'virtual-custom',
+      label: decoded.name || 'QRの参加者',
+      name: decoded.name,
+      room: decoded.room,
+      contact: decoded.contact,
+      photo: decoded.photo ? avatar(decoded.name || '氏') : '',
+      consent: decoded.consent,
+      mockItems: VIRTUAL_QR_USERS[0].mockItems,
+    }, true);
+  } else {
+    applyVirtualUser(VIRTUAL_QR_USERS[0], true);
+  }
+}

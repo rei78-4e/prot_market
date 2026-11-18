@@ -81,17 +81,16 @@
 
         <div class="qr-card" id="qr-card">
           <div class="qr-head">
-            <h3>名札印刷用のQRコード（受付提示モック）</h3>
-            <p class="muted">受付でこのQRコードを見せると、「公開する」をオンにした情報だけを運営端末へ渡して名札を印刷できます。データベースには保存されません。</p>
+            <h3>受付提示用のQRコード（モック）</h3>
+            <p class="muted">会場の受付でこのQRコードを見せると、「公開する」にチェックした項目だけを運営側が読み取って名札を印刷します。</p>
           </div>
           <div class="qr-body">
             <div class="qr-code" id="profile-qr" aria-live="polite"></div>
             <div class="qr-detail">
-              <p class="qr-label">QRに含まれる公開情報</p>
+              <p class="qr-label">このQRで提供される情報</p>
               <dl class="qr-summary" id="qr-summary"></dl>
               <div class="qr-actions">
-                <a class="secondary" id="qr-open-admin" href="admin.html#tag-section">運営画面で読み取る（デモ）</a>
-                <button type="button" class="secondary" id="qr-copy">QRコードをコピー</button>
+                <a class="secondary" id="qr-open-admin" href="admin.html?qr=mock#tag-section">運営画面でQR読み取りを試す</a>
               </div>
             </div>
           </div>

@@ -193,20 +193,6 @@ byId('photo-clear').addEventListener('click', () => {
 byId('profile-form').addEventListener('input', renderProfileQR);
 byId('profile-form').addEventListener('change', renderProfileQR);
 
-byId('qr-copy').addEventListener('click', async () => {
-  const code = byId('profile-qr').dataset.code || encodeProfileQR(draftSeller());
-  try {
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      await navigator.clipboard.writeText(code);
-      toast('QRコードのデータ文字列をコピーしました');
-      return;
-    }
-  } catch {
-    /* クリップボード非対応時はフォールバック */
-  }
-  toast(`QRデータ: ${code.slice(0, 28)}…`);
-});
-
 byId('profile-form').addEventListener('submit', (event) => {
   event.preventDefault();
   const seller = state.sellers[state.me];

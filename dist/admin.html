@@ -108,28 +108,23 @@
 <dialog id="qr-dialog" class="dialog">
   <form method="dialog" class="dialog-bar"><button class="dialog-close" aria-label="閉じる">×</button></form>
   <div class="dialog-info">
-    <p class="kicker">受付スキャナー（デモモック）</p>
-    <h2>名札用QRコードの読み取り</h2>
-    <p class="muted">参加者がスマホ画面に表示したQRコードをカメラで読み取る想定のモックです。サーバーやDBには保存せず、名札印刷プレビューへ直接反映します。</p>
+    <p class="kicker">受付カメラ（モック）</p>
+    <h2>QRコード読み取りシミュレーション</h2>
+    <p class="muted">参加者のスマホ画面のQRコードを読み取ったふりをして、仮想ユーザーの名札を表示します（DB保存なし）。</p>
     <div class="qr-scanner-mock">
-      <div class="qr-viewfinder" aria-hidden="true">
-        <span class="qr-frame"></span>
-        <span class="qr-caption">カメラ枠にQRコードを合わせる想定</span>
+      <div class="qr-viewfinder" id="qr-viewfinder" aria-live="polite">
+        <div class="qr-frame" id="qr-mock-frame"></div>
+        <span class="qr-caption" id="qr-mock-state">QRコードをスキャン中…</span>
       </div>
       <div class="qr-preset-list">
-        <p class="qr-label">ワンクリックで読み取りを再現</p>
+        <p class="qr-label">読み取る仮想ユーザーを選択</p>
         <div class="qr-presets" id="qr-presets"></div>
       </div>
     </div>
-    <form class="qr-paste-form" id="qr-paste-form" novalidate>
-      <label class="field">
-        <span>またはコピーしたQRデータを貼り付け</span>
-        <div class="field-row">
-          <input id="qr-paste-input" placeholder="MEGURU1:..." autocomplete="off">
-          <button class="primary" type="submit">反映する</button>
-        </div>
-      </label>
-    </form>
+    <div class="form-actions">
+      <button class="primary" id="qr-apply-btn" type="button">この仮想ユーザーの名札を表示</button>
+      <button class="secondary" id="qr-next-btn" type="button">別のQRを読み直す</button>
+    </div>
   </div>
 </dialog>
 <div id="toast" role="status" aria-live="polite"></div>

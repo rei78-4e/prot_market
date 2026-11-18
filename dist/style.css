@@ -358,10 +358,23 @@ button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
   border: 1px solid var(--line);
 }
 .qr-frame {
-  width: 88px;
-  height: 88px;
-  border: 2px dashed var(--ink);
+  position: relative;
+  width: 96px;
+  height: 96px;
+  padding: 4px;
+  border: 2px solid var(--ink);
   background: #fff;
+  overflow: hidden;
+}
+.qr-frame svg { width: 100%; height: 100%; display: block; }
+.qr-viewfinder.scanning .qr-frame::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 2px;
+  background: var(--danger);
 }
 .qr-caption { font-size: 11px; color: var(--muted); line-height: 1.4; }
 .qr-presets { display: flex; flex-direction: column; gap: 6px; }
@@ -375,14 +388,12 @@ button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
   background: #fff;
   border: 1px solid var(--line);
 }
-.qr-preset-btn:hover { border-color: var(--ink); background: var(--tint); }
+.qr-preset-btn:hover, .qr-preset-btn.active { border-color: var(--ink); background: var(--tint); }
 .qr-preset-mini { width: 44px; height: 44px; border: 1px solid var(--line); background: #fff; }
 .qr-preset-mini svg { width: 100%; height: 100%; display: block; }
 .qr-preset-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .qr-preset-text b { font-size: 12px; }
 .qr-preset-text small { font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.qr-paste-form { padding-top: 12px; border-top: 1px solid var(--line); }
-.qr-paste-form .field { margin: 0; }
 
 /* 引換券 */
 .wallet-card {
