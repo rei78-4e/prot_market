@@ -369,8 +369,197 @@ const VIRTUAL_QR_USERS = [
 
 let currentVirtualIndex = 0;
 let scanTimer = null;
+let detectTimer = null;
+let cameraStream = null;
+const scanCanvas = document.createElement('canvas');
 
-function selectVirtualUser(index) {
+/* 中身をデコードせず、QR特有の1:1:3:1:1ファインダーパターン（切り出しシンボル）を画像から検出 */
+function checkRatio11311(counts) {
+  const total = counts[0] + counts[1] + counts[2] + counts[3] + counts[4];
+  if (total < 7) return false;
+  const unit = total / 7;
+  const maxVar = unit * 0.72;
+  return (
+    Math.abs(unit - counts[0]) < maxVar &&
+    Math.abs(unit - counts[1]) < maxVar &&
+    Math.abs(3 * unit - counts[2]) < 3 * maxVar &&
+    Math.abs(unit - counts[3]) < maxVar &&
+    Math.abs(unit - counts[4]) < maxVar
+  );
+}
+
+function detectQRFinderInFrame(video) {
+  const vw = video.videoWidth;
+  const vh = video.videoHeight;
+  if (!vw || !vh) return false;
+  const w = 160;
+  const h = Math.max(90, Math.round((vh / vw) * w));
+  scanCanvas.width = w;
+  scanCanvas.height = h;
+  const ctx = scanCanvas.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(video, 0, 0, w, h);
+  const data = ctx.getImageData(0, 0, w, h).data;
+  const lum = new Uint8Array(w * h);
+  let sum = 0;
+  for (let i = 0, p = 0; i < lum.length; i++, p += 4) {
+    const y = (data[p] * 77 + data[p + 1] * 150 + data[p + 2] * 29) >> 8;
+    lum[i] = y;
+    sum += y;
+  }
+  const thresh = (sum / lum.length) * 0.88;
+  const isDark = (x, y) => lum[y * w + x] < thresh;
+
+  const verifyVertical = (cx, cy, maxCount) => {
+    const v = [0, 0, 0, 0, 0];
+    let y = cy;
+    while (y >= 0 && isDark(cx, y)) { v[2]++; y--; }
+    if (y < 0) return false;
+    while (y >= 0 && !isDark(cx, y) && v[1] <= maxCount) { v[1]++; y--; }
+    if (y < 0 || v[1] > maxCount) return false;
+    while (y >= 0 && isDark(cx, y) && v[0] <= maxCount) { v[0]++; y--; }
+    if (v[0] > maxCount) return false;
+
+    y = cy + 1;
+    while (y < h && isDark(cx, y)) { v[2]++; y++; }
+    if (y >= h) return false;
+    while (y < h && !isDark(cx, y) && v[3] <= maxCount) { v[3]++; y++; }
+    if (y >= h || v[3] > maxCount) return false;
+    while (y < h && isDark(cx, y) && v[4] <= maxCount) { v[4]++; y++; }
+    if (v[4] > maxCount) return false;
+    return checkRatio11311(v);
+  };
+
+  const centers = [];
+  for (let y = 4; y < h - 4; y += 2) {
+    const counts = [0, 0, 0, 0, 0];
+    let state = 0;
+    for (let x = 0; x < w; x++) {
+      if (isDark(x, y)) {
+        if ((state & 1) === 1) state++;
+        counts[state]++;
+      } else if (state === 0 && counts[0] === 0) {
+        continue;
+      } else {
+        if ((state & 1) === 0) {
+          if (state === 4) {
+            if (checkRatio11311(counts)) {
+              const cx = Math.round(x - counts[4] - counts[3] - counts[2] / 2);
+              const maxC = counts[2];
+              if (cx >= 0 && cx < w && verifyVertical(cx, y, maxC)) {
+                if (!centers.some((c) => Math.hypot(c.x - cx, c.y - y) < 12)) {
+                  centers.push({ x: cx, y });
+                  if (centers.length >= 2) return true;
+                }
+              }
+            }
+            counts[0] = counts[2];
+            counts[1] = counts[3];
+            counts[2] = counts[4];
+            counts[3] = 1;
+            counts[4] = 0;
+            state = 3;
+          } else {
+            state++;
+            counts[state]++;
+          }
+        } else {
+          counts[state]++;
+        }
+      }
+    }
+  }
+  return false;
+}
+
+async function startCameraStream() {
+  const video = byId('qr-video');
+  const frame = byId('qr-mock-frame');
+  if (!video || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return false;
+  if (cameraStream) return true;
+  try {
+    try {
+      cameraStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' } },
+        audio: false,
+      });
+    } catch {
+      cameraStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+    }
+    video.srcObject = cameraStream;
+    video.hidden = false;
+    if (frame) frame.classList.add('over-video');
+    await video.play().catch(() => {});
+    startQRDetectionLoop();
+    return true;
+  } catch {
+    cameraStream = null;
+    video.hidden = true;
+    if (frame) frame.classList.remove('over-video');
+    return false;
+  }
+}
+
+function startQRDetectionLoop() {
+  clearInterval(detectTimer);
+  const video = byId('qr-video');
+  const vf = byId('qr-viewfinder');
+  const stateText = byId('qr-mock-state');
+  let nativeDetector = null;
+  if (typeof window.BarcodeDetector === 'function') {
+    try {
+      nativeDetector = new window.BarcodeDetector({ formats: ['qr_code'] });
+    } catch {
+      nativeDetector = null;
+    }
+  }
+  if (vf) vf.classList.add('scanning');
+  if (stateText) stateText.textContent = 'カメラにQRコードをかざしてください…';
+
+  detectTimer = setInterval(async () => {
+    if (!cameraStream || !video || video.readyState < 2) return;
+    let found = false;
+    if (nativeDetector) {
+      try {
+        const codes = await nativeDetector.detect(video);
+        if (codes && codes.length > 0) found = true;
+      } catch {
+        /* フォールバックとして自前のファインダー検出を使う */
+      }
+    }
+    if (!found) {
+      found = detectQRFinderInFrame(video);
+    }
+    if (found) {
+      clearInterval(detectTimer);
+      detectTimer = null;
+      const user = VIRTUAL_QR_USERS[currentVirtualIndex];
+      if (vf) vf.classList.remove('scanning');
+      if (stateText) stateText.textContent = `QRコードを認識しました！ ${user.label}`;
+      setTimeout(() => {
+        if (qrDialog && qrDialog.open) applyVirtualUser(user, false);
+      }, 500);
+    }
+  }, 160);
+}
+
+function stopCameraStream() {
+  clearTimeout(scanTimer);
+  clearInterval(detectTimer);
+  detectTimer = null;
+  const video = byId('qr-video');
+  const frame = byId('qr-mock-frame');
+  if (cameraStream) {
+    cameraStream.getTracks().forEach((track) => track.stop());
+    cameraStream = null;
+  }
+  if (video) {
+    video.srcObject = null;
+    video.hidden = true;
+  }
+  if (frame) frame.classList.remove('over-video');
+}
+
+function selectVirtualUser(index, delayMs) {
   currentVirtualIndex = ((index % VIRTUAL_QR_USERS.length) + VIRTUAL_QR_USERS.length) % VIRTUAL_QR_USERS.length;
   const user = VIRTUAL_QR_USERS[currentVirtualIndex];
   const code = encodeProfileQR(user);
@@ -379,12 +568,17 @@ function selectVirtualUser(index) {
   const vf = byId('qr-viewfinder');
   if (frame) frame.innerHTML = qrSVG(code);
   if (vf) vf.classList.add('scanning');
-  if (stateText) stateText.textContent = 'QRコードをスキャン中…';
   clearTimeout(scanTimer);
-  scanTimer = setTimeout(() => {
-    if (vf) vf.classList.remove('scanning');
-    if (stateText) stateText.textContent = `読み取り完了：${user.label}`;
-  }, 420);
+  if (cameraStream) {
+    if (stateText) stateText.textContent = `カメラにQRコードをかざしてください（選択中：${user.name || '匿名'}）`;
+    if (!detectTimer) startQRDetectionLoop();
+  } else {
+    if (stateText) stateText.textContent = 'QRコードをスキャン中…';
+    scanTimer = setTimeout(() => {
+      if (vf) vf.classList.remove('scanning');
+      if (stateText) stateText.textContent = `読み取り完了：${user.label}`;
+    }, delayMs || 900);
+  }
   renderQRPresets();
 }
 
@@ -427,13 +621,17 @@ function applyVirtualUser(user, scroll) {
 }
 
 if (byId('open-qr-scan') && qrDialog) {
-  byId('open-qr-scan').addEventListener('click', () => {
-    selectVirtualUser(currentVirtualIndex);
+  byId('open-qr-scan').addEventListener('click', async () => {
     if (!qrDialog.open) qrDialog.showModal();
+    selectVirtualUser(currentVirtualIndex, 1600);
+    const hasCam = await startCameraStream();
+    if (hasCam) selectVirtualUser(currentVirtualIndex, 1600);
   });
 
+  qrDialog.addEventListener('close', stopCameraStream);
+
   byId('qr-next-btn').addEventListener('click', () => {
-    selectVirtualUser(currentVirtualIndex + 1);
+    selectVirtualUser(currentVirtualIndex + 1, 1000);
   });
 
   byId('qr-apply-btn').addEventListener('click', () => {
@@ -444,7 +642,7 @@ if (byId('open-qr-scan') && qrDialog) {
     const btn = event.target.closest('[data-vindex]');
     if (btn) {
       const idx = Number(btn.dataset.vindex) || 0;
-      selectVirtualUser(idx);
+      selectVirtualUser(idx, 600);
       applyVirtualUser(VIRTUAL_QR_USERS[idx], false);
       return;
     }

@@ -113,8 +113,11 @@
     <p class="muted">参加者のスマホ画面のQRコードを読み取ったふりをして、仮想ユーザーの名札を表示します（DB保存なし）。</p>
     <div class="qr-scanner-mock">
       <div class="qr-viewfinder" id="qr-viewfinder" aria-live="polite">
-        <div class="qr-frame" id="qr-mock-frame"></div>
-        <span class="qr-caption" id="qr-mock-state">QRコードをスキャン中…</span>
+        <div class="qr-camera-box">
+          <video id="qr-video" autoplay playsinline muted hidden></video>
+          <div class="qr-frame" id="qr-mock-frame"></div>
+        </div>
+        <span class="qr-caption" id="qr-mock-state">カメラを起動中…</span>
       </div>
       <div class="qr-preset-list">
         <p class="qr-label">読み取る仮想ユーザーを選択</p>
