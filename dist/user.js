@@ -285,6 +285,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 /* 初期表示 */
+renderVersion();
 fillForm();
 renderMarket();
 renderSummary();

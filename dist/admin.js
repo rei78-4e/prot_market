@@ -721,6 +721,7 @@ byId('reset').addEventListener('click', () => {
 });
 
 renderTiers();
+renderVersion();
 fillSellerSelect(byId('seller-select'), false);
 fillBatterySeller();
 fillTagSeller(defaultTagSeller());

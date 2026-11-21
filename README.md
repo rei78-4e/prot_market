@@ -37,6 +37,16 @@ const CFG = {
 };
 ```
 
+## バージョン
+
+現在のバージョンは `1.0.0` です。SemVer（`major.minor.patch`）に従います。
+
+- 互換性を壊す変更：`major`
+- 後方互換な機能追加：`minor`
+- 修正：`patch`
+
+`dist/app.js` の `CFG.version` と `package.json` の `version` を同じ値に揃えて管理します。`dist/app.js` の `bumpVersion()` で次回バージョンを計算できます。HTML の CSS / JS 読み込みパスにも `?v=<version>` を付けて、ブラウザーのキャッシュを確実に更新します。フッターに `v<version>` を表示します。
+
 ## 起動
 
 ```sh

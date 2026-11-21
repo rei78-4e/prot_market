@@ -17,6 +17,15 @@ const ctx = {
 vm.createContext(ctx);
 vm.runInContext(fs.readFileSync(__dirname + '/dist/app.js', 'utf8'), ctx);
 const run = (code) => vm.runInContext(code, ctx);
+const pkg = require('./package.json');
+
+/* SemVer */
+assert.equal(run('CFG.version'), pkg.version, 'CFG と package.json のバージョンを揃える');
+assert.match(run('CFG.version'), /^\d+\.\d+\.\d+$/, 'major.minor.patch 形式');
+assert.equal(run('versionLabel()'), 'v' + pkg.version);
+assert.equal(run("bumpVersion('major')"), '2.0.0');
+assert.equal(run("bumpVersion('minor')"), '1.1.0');
+assert.equal(run("bumpVersion('patch')"), '1.0.1');
 
 /* 引換券 */
 assert.deepEqual(run('CFG.tiers'), [1, 2, 3, 5, 10]);

@@ -3,6 +3,7 @@
 /* めぐる団地 防災フリマ — 共通ロジック（DOM非依存の部分を中心に） */
 
 const CFG = {
+  version: '1.0.0',          // SemVer（package.json と同期）
   key: 'meguru-v3',
   hazardTickets: 2,          // 危険物（モバイルバッテリー）は1個2枚
   tiers: [1, 2, 3, 5, 10],  // 一般物の引換券5段階
@@ -11,6 +12,25 @@ const CFG = {
   photoQuality: 0.78,
   limits: { title: 40, name: 24, room: 16, contact: 60 },
 };
+
+/* SemVer（major.minor.patch） */
+function versionLabel() {
+  return 'v' + CFG.version;
+}
+
+function bumpVersion(part) {
+  const [major, minor, patch] = CFG.version.split('.').map(Number);
+  if (part === 'major') return `${major + 1}.0.0`;
+  if (part === 'minor') return `${major}.${minor + 1}.0`;
+  if (part === 'patch') return `${major}.${minor}.${patch + 1}`;
+  throw new Error('bumpVersion: major / minor / patch を指定してください');
+}
+
+function renderVersion() {
+  document.querySelectorAll('[data-version]').forEach((el) => {
+    el.textContent = versionLabel();
+  });
+}
 
 const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
